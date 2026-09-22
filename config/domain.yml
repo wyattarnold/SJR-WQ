@@ -1,0 +1,113 @@
+# Study area definition for the San Joaquin water quality data inventory.
+#
+# Region 1804 contains 13 HUC8 subbasins. The in_scope list is the San Joaquin
+# mainstem plus its contributing tributaries from the Sierra crest down to
+# Vernalis.
+#
+# Naming in the WBD is misleading: "Upper Tuolumne" (18040009) and "Upper
+# Stanislaus" (18040010) extend all the way down to Modesto and Ripon, so they
+# cover the full tributary, not just the headwaters. Verified 2026-08-19 by
+# point-in-polygon test against hydro.nationalmap.gov.
+
+region: "1804"
+
+huc8_in_scope:
+  "18040001": Middle San Joaquin-Lower Chowchilla
+  "18040002": Lower San Joaquin River
+  "18040006": Upper San Joaquin
+  "18040007": Fresno River
+  "18040008": Upper Merced
+  "18040009": Upper Tuolumne
+  "18040010": Upper Stanislaus
+  "18040014": Panoche-San Luis Reservoir
+
+huc8_excluded:
+  "18040003": San Joaquin Delta        # downstream of Vernalis, see boundary_anchors
+  "18040012": Upper Mokelumne          # drains to the Delta / Sacramento side
+  "18040013": Upper Cosumnes           # drains to the Delta / Sacramento side
+  "18040051": Rock Creek-French Camp Slough  # enters SJR below Vernalis
+  "18040011": Upper Calaveras         # joins the SJR at Stockton, below Vernalis
+
+# A subbasin belongs in scope when its water passes the modeled outlet. The
+# Calaveras joins the San Joaquin at Stockton, roughly 17 km below Mossdale, so
+# its water reaches the Delta without passing Vernalis and no station on it
+# closes a balance there.
+#
+# The raw cache is keyed by bounding box, so scope is a re-clip. Moving
+# 18040011 into huc8_in_scope brings the subbasin back with no re-fetch.
+
+# Vernalis and Mossdale both fall inside HUC 18040003, which is excluded.
+# They are the downstream boundary condition for the model, so stations within
+# these buffers are kept and flagged boundary=true.
+boundary_anchors:
+  - name: Vernalis
+    lat: 37.6764
+    lon: -121.2661
+    buffer_km: 8
+    note: D-1641 compliance point, EC objective 0.7/1.0 mmhos/cm
+  - name: Mossdale
+    lat: 37.7864
+    lon: -121.3061
+    buffer_km: 8
+    note: head of Old River split, upstream limit of tidal influence
+
+# Bounding box for API calls that only accept a bbox (west, south, east, north).
+# Generous on purpose; results are clipped to the AOI polygon afterwards.
+#
+# It has to cover the union of every in-scope HUC8, which reaches 38.52 N in
+# the Stanislaus headwaters and -118.65 E at the Sierra crest above Millerton.
+# The earlier 38.35 N edge cut the top off the Stanislaus.
+bbox: [-121.60, 36.30, -118.55, 38.60]
+
+# Period the model is aimed at. A station whose record ended in 1998 is real
+# history and calibrates no part of this window, so the shortlist measures
+# every record against it.
+#
+# `min_record_years` is the shortlist rule and the last step of the funnel: a
+# station reaches it when its temperature record or its conductance record
+# covers at least this many years inside the period. Three years spans a wet
+# year, a dry year, and the turn between them, which is the shortest record
+# that constrains a seasonal signal at more than one flow. The rule takes the
+# longer of the two records rather than their overlap, because a thermograph
+# with no conductance beside it still calibrates the temperature field.
+#
+# `active_within_years` sets the `active` and `pair_active` columns. Both are
+# columns rather than steps: a record that ended in 2014 covers 2000 to 2014
+# either way, and 203 of the stations it would remove come from WQP, CEDEN,
+# and eSMR, where the end date is the last published sample rather than the
+# date the station went quiet.
+calibration_period:
+  start: "2000-01-01"
+  end: null           # null means "through the latest data available"
+  min_record_years: 3
+  active_within_years: 3
+
+# A narrower window used by the concurrent-coverage figures and by the mainstem
+# gap tables. Every station on those maps holds an unbroken continuous record
+# across the whole span, so the window trades station count against record
+# length: a longer window keeps fewer stations, and a shorter one keeps fewer
+# years of each.
+#
+# `figures/15_coverage_window.png` draws both curves and their product, which
+# is the concurrent record a window makes available. The product peaks at 2011
+# for temperature and discharge and at 2010 for the three parameters together,
+# so this start sits at one peak and within a few percent of the other. It also
+# covers the 2012-2016 drought, the 2017 and 2023 wet years, and the
+# restoration flows released from Friant since 2009 in full, which a window
+# starting after 2012 does not. Change the start here and re-run sjrwq.maps to
+# redraw the comparison; sjrwq.coverage.window_tradeoff returns the numbers.
+#
+# The end date is the first instant outside the window, so a window ending
+# 2026-01-01 covers 2011 through 2025 and `coverage.label` names it that way.
+coverage_window:
+  start: "2011-01-01"
+  end: "2026-01-01"
+
+crs:
+  storage: "EPSG:4326"
+  area: "EPSG:3310"   # California Albers, for distance and density work
+
+wbd_service: "https://hydro.nationalmap.gov/arcgis/rest/services/wbd/MapServer"
+wbd_layers:
+  huc8: 4
+  huc12: 6

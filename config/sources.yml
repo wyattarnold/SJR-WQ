@@ -1,0 +1,263 @@
+# Inventory of data sources, whether or not they are automated yet.
+#
+# tier 1  fully automated through an API, implemented in src/sjrwq/sources/
+# tier 2  scrape or manual download, partially implemented
+# tier 3  water balance and physical framework, mostly manual
+#
+# status: implemented | partial | todo | retrievable | request
+#
+# `retrievable` means a public endpoint was checked and answers: this is a
+# parsing job that nobody has done yet, not a thing that needs chasing.
+# `request` means no public route was found and a named holder has to send it.
+# The distinction was being made carelessly, and most of what this file called
+# a request turned out to be a public portal. Every status below was checked
+# with a live request on 2026-08-20; the URL that was checked is in the notes.
+
+sources:
+
+  usgs:
+    tier: 1
+    status: implemented
+    module: sjrwq.sources.usgs
+    endpoint: https://api.waterdata.usgs.gov/ogcapi/v0
+    covers: [water_temperature, specific_conductance, discharge, stage, extended_wq]
+    record_type: continuous and daily sensor records
+    notes: >
+      Uses the modernized OGC APIs. Legacy waterservices.usgs.gov and the
+      dataretrieval.nwis module are being decommissioned in Q1 2027 and are
+      deliberately not used. Discrete USGS samples come through the WQP
+      instead, so this module covers time series only.
+
+  wqp:
+    tier: 1
+    status: implemented
+    module: sjrwq.sources.wqp
+    endpoint: https://www.waterqualitydata.us/wqx3
+    covers: [core, major_ions, extended_wq]
+    record_type: discrete samples
+    notes: >
+      Single highest-yield source: CEDEN, SWAMP, the irrigated lands
+      coalitions, USGS discrete samples, and EPA STORET all publish here.
+      WQX 3.0 lives at /wqx3/, not /beta/ (that path now 404s). The legacy
+      /data/ 2.2 profiles omit USGS results added after 2024-03-11.
+      The summary/monitoringLocation service returns an empty body, so period
+      of record is computed from downloaded results.
+
+  cdec:
+    tier: 1
+    status: implemented
+    module: sjrwq.sources.cdec
+    endpoint: https://cdec.water.ca.gov/dynamicapp
+    covers: [water_temperature, specific_conductance, discharge, stage, reservoir_storage]
+    record_type: continuous telemetry
+    notes: >
+      No metadata web service, so staSearch and staMeta are scraped. The
+      staMeta sensor table carries period of record per sensor, which avoids
+      probing CSVDataServlet. The dated comment log on each staMeta page is
+      also captured: rating changes and buried orifice lines show up as step
+      changes in a calibration series.
+
+  esmr:
+    tier: 1
+    status: implemented
+    module: sjrwq.sources.esmr
+    endpoint: https://data.ca.gov/api/3/action
+    covers: [core, major_ions, extended_wq, discharge]
+    record_type: NPDES effluent and receiving water
+    notes: >
+      Electronic self-monitoring reports from CIWQS, republished on data.ca.gov
+      as one CKAN datastore table per sampling year. None of it reaches the
+      WQP, so this is the only source carrying municipal return flows: outfall
+      flow, temperature, and EC at the point where treated wastewater enters
+      the river, plus receiving-water samples above and below each outfall.
+      The whole aggregation runs server-side through datastore_search_sql, so
+      21 years of statewide records reduce to a few thousand summary rows in
+      about a minute.
+      Turlock RWQCF is the significant one in the domain: 93,000 records from
+      2008 to now, effluent plus four receiving-water points on the San
+      Joaquin. Manteca and Merced are next. Modesto's own outfall is thin here,
+      only a receiving-water station from 2011 to 2017, because since 2017 it
+      reports through the North Valley Regional Recycled Water Program instead.
+      Stockton's plant is filed as "Wastewater Recovery Center" and is the
+      largest in the region by a wide margin, but it sits about 17 km below
+      Mossdale and the study-area clip removes it.
+      Watch out: longitude sign is inconsistent, about a fifth of records drop
+      the minus. Temperature is reported in both Fahrenheit and Celsius.
+      Units are free text and sometimes wrong, so EC turns up labeled MGD.
+
+  ceden:
+    tier: 1
+    status: implemented
+    module: sjrwq.sources.ceden
+    endpoint: https://data.ca.gov/api/3/action
+    covers: [core, major_ions, extended_wq]
+    record_type: discrete samples
+    notes: >
+      CEDEN chemistry, one live datastore resource per sampling year, roughly
+      1.8 million statewide records each. The aggregation runs server-side, so
+      a full year reduces to a few thousand station-analyte rows. Mostly a
+      cross-check on WQP completeness: of 509 CEDEN stations that survive the
+      study-area clip, 449 already appear through the portal and 60 do not.
+      CEDEN's analyte spellings are close to the portal's but not identical,
+      so a handful of aliases are declared in the module.
+
+  dwr_wdl:
+    tier: 1
+    status: implemented
+    module: sjrwq.sources.dwr_wdl
+    endpoint: https://data.cnra.ca.gov/api/3/action
+    covers: [core, extended_wq]
+    record_type: continuous sensor records
+    notes: >
+      The Water Data Library site has no API. The entry point is the CNRA
+      "DWR Continuous Data Download Links" dataset, whose Station-Trace table
+      gives one row per station and parameter with start, end, and output
+      interval, so the whole availability picture comes back in one query.
+      The only source in the harvest that publishes a horizontal datum, a
+      positional accuracy, and a Salinity parameter. Note the county column is
+      named "County" with a capital C and has to be quoted in SQL.
+
+  usbr_rise:
+    tier: 1
+    status: implemented
+    module: sjrwq.sources.usbr_rise
+    endpoint: https://data.usbr.gov/rise/api
+    covers: [water_temperature, discharge, stage, reservoir_storage, major_ions,
+             extended_wq]
+    record_type: operations records and periodic chemistry
+    notes: >
+      Friant and Millerton, New Melones, San Luis, and the Delta-Mendota
+      Canal, as Reclamation reports them. Small and exactly on the boundary
+      conditions: 24 of 1,012 national locations fall in the study bbox, 19
+      publish any series, and 8 survive the study-area clip. Needs Accept: application/vnd.api+json. Its
+      catalog-item endpoint accepts locationId and ignores it, answering with
+      the entire national catalog every time, so the series for a location
+      have to be reached through location -> catalogRecord -> catalogItem.
+      Every series carries a hasProfile flag, and no series at any of the
+      seven rim dams sets it, which is how the missing reservoir profiles
+      became a checked absence rather than an assumed one.
+
+  edi_iep:
+    tier: 1
+    status: implemented
+    module: sjrwq.sources.edi
+    endpoint: https://cn.dataone.org/cn/v2
+    authenticated_endpoint: https://pasta.lternet.edu/package
+    covers: [core, extended_wq]
+    discovery: https://cn.dataone.org/cn/v2/query/solr
+    notes: >
+      IEP discrete and continuous water quality, mainly at the downstream
+      boundary. Recorded as "blocked" for two passes and never blocked. PASTA
+      refuses anonymous requests to exactly three service methods,
+      searchDataPackages, listDataPackageRevisions, and readMetadata, all 403.
+      EDI is a DataONE member node, so DataONE's Solr index and object endpoint
+      serve the same catalog and the same EML with no account, filtering on
+      the declared envelope server-side. That is the default route and anyone
+      can run it. An authenticated PASTA route also works and buys revision
+      freshness: POST an API key to auth.edirepository.org/auth/v1/key
+      (form-encoded) for an ES256 JWT, then send it to PASTA as a cookie named
+      edi-token. Verified by probe: a malformed edi-token gets 401 "EDI token
+      validation failed" where no cookie gets the anonymous 403, so Gatekeeper
+      reads it. An EDI ID of the form EDI-<40 hex> is a profile identifier and
+      not a credential. Read EDI_API_KEY or EDI_TOKEN from the environment,
+      never from this file, and fall back to DataONE when absent. DataONE lags
+      PASTA by one revision on 13 of 115 candidates, edi.731 among them.
+      Of those 115, three filters keep 12: a declared envelope under six
+      degrees across, at least one point geographicCoverage inside the bbox,
+      and at least one attribute mapping to a core or water-balance parameter in
+      a package that is not model output. 1,784 stations before the study-area
+      clip and 26 after. Only edi.2180 publishes one table per station, so only
+      its rows state which station measures which parameter; every other row
+      reads period_scope = dataset. Data files live under /package/data/, a
+      path PASTA serves to anonymous callers, and are not downloaded.
+
+  sjrrp:
+    tier: 2
+    status: request
+    endpoint: https://restoresjr.net
+    covers: [water_temperature]
+    notes: >
+      CDFW thermographs across the Restoration Area from autumn 2009 onward,
+      mainstem and some tributaries, plus temperature atlases by reach
+      (Millerton, 1A, 1B, 2A, 2B, 3, 4A, 4B1, 4B2, 5), seepage and groundwater
+      monitoring, and HEC-RAS channel geometry. The site was restructured and
+      /downloads/ and /monitoring-data/data-reporting/ now 404, so any scraper
+      has to walk the current sitemap. Atlases are PDF; raw thermograph records
+      need a data request.
+
+  grassland_bypass:
+    tier: 2
+    status: partial
+    endpoint: https://www.usbr.gov/mp/grassland/
+    covers: [specific_conductance, selenium, boron]
+    notes: >
+      Weekly salinity, selenium, and boron at San Luis Drain, Mud Slough, and
+      Salt Slough since 1996, run by Reclamation and San Luis & Delta-Mendota
+      Water Authority, published through SFEI. The west-side salt loading
+      record. Much of it also lands in CEDEN, and boron and selenium are
+      already the two most common characteristics the WQP returns for HUC
+      18040002, so check for overlap before scraping the PDFs.
+
+  ilrp_coalitions:
+    tier: 2
+    status: partial
+    covers: [core, extended_wq]
+    notes: >
+      East San Joaquin, San Joaquin County & Delta, and Westside San Joaquin
+      River Watershed coalitions. Measurements flow to CEDEN and are picked up
+      by the WQP harvest. Their reports add the tile-drain and return-flow
+      context that CEDEN does not carry.
+
+  ferc_relicensing:
+    tier: 2
+    status: request
+    covers: [water_temperature]
+    notes: >
+      Don Pedro (TID/MID, P-2299), Merced River (MID, P-2179), and New
+      Melones/Stanislaus study reports contain multi-year sonde deployments and
+      reservoir profiles available nowhere else. High value for tributary
+      boundary temperature.
+
+  reservoir_profiles:
+    tier: 2
+    status: request
+    covers: [water_temperature]
+    notes: >
+      Millerton (Reclamation), New Melones (Reclamation/USACE), Don Pedro
+      (TID/MID), McClure (MID), Hensley and Hidden (USACE). These set release
+      temperature, so track them even where the answer is "ask someone".
+
+  cv_salts:
+    tier: 2
+    status: todo
+    endpoint: https://www.waterboards.ca.gov/centralvalley/water_issues/salinity/
+    covers: [specific_conductance, total_dissolved_solids]
+    notes: SSALTS reports, EC objectives at Vernalis, real-time WQ management program.
+
+  diversions:
+    tier: 3
+    status: todo
+    covers: [diversion, discharge]
+    notes: >
+      SWRCB eWRIMS and annual Reports of Water Diversion and Use; Reclamation
+      CVO daily and monthly reports (Mendota Pool, Exchange Contractors, DMC);
+      CDEC and USGS gages on major canals. CDEC sensors 69, 110, 111, and 72
+      are already harvested.
+
+  channel_geometry:
+    tier: 3
+    status: todo
+    covers: [bathymetry]
+    notes: >
+      SJRRP surveyed cross sections and HEC-RAS models for Reaches 1-5, DWR
+      CVFED LiDAR and cross-section surveys, USGS 3DEP, USACE lower San Joaquin
+      levee surveys.
+
+  framework_layers:
+    tier: 3
+    status: partial
+    notes: >
+      WBD HUC8/HUC12 and NLDI river centerlines are implemented in
+      sjrwq.domain and sjrwq.rivers. Still to add: 303(d) listings for
+      temperature and EC impairments, NPDES outfall locations, National
+      Inventory of Dams.

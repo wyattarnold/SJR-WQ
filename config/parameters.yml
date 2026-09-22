@@ -1,0 +1,356 @@
+# Crosswalk from source-specific parameter identifiers to canonical names.
+#
+# Groups drive figure production and the gap analysis:
+#   core          - direct calibration targets for a temperature/salinity model
+#   major_ions    - supports a salt balance and EC-to-TDS conversion
+#   extended_wq   - relevant to EcoSIM biogeochemistry, not to T/S calibration
+#   water_balance - flow terms needed to close the mass balance
+#
+# CDEC sensor numbers verified 2026-08-19 against cdec.water.ca.gov/misc/senslist.html
+# USGS parameter codes are the standard 5-digit pcodes.
+# WQP names are CharacteristicName values from the WQX domain list.
+# eSMR names come from the CIWQS parameter vocabulary and are matched exactly.
+# Anything eSMR reports that is not listed here is logged during the harvest,
+# so a missing entry shows up as a warning rather than as silent data loss.
+#
+# edi_attribute is the exception, and is a list of regular expressions rather
+# than names. The other seven sources are water agencies publishing a
+# controlled parameter vocabulary. EDI is a general-purpose repository, and
+# every package in it names its own columns: the same measurement arrives as
+# Water_Temperature, Temperature, Temp, or WaterTempC across four datasets.
+# Patterns are matched case-insensitively against the EML attribute name and
+# its definition joined together, so a column called "Temperature" defined as
+# "Surface water temperature" is matched on the definition. sources/edi.py
+# holds the exclusion list that keeps air and soil temperature out.
+
+parameters:
+
+  water_temperature:
+    group: core
+    unit: degC
+    usgs_pcode: ["00010"]
+    cdec_sensor: [25, 146, 225, 226, 227]   # 25 is degF, 146 is degC, 225-227 daily stats
+    wqp_characteristic: ["Temperature, water"]
+    esmr_parameter: ["Temperature"]
+    usbr_parameter: ["Water Temperature", "Temperature"]
+    dwr_parameter: ["WaterTemp", "WaterTempADCP", "WaterTempGW"]
+    edi_attribute: ["water[\\s_-]*temp", "temp\\w*\\s+of\\s+water", "\\bwtemp"]
+    notes: CDEC sensor 25 reports degF at many stations. Check units per station.
+
+  specific_conductance:
+    group: core
+    unit: uS/cm @25C
+    usgs_pcode: ["00095", "90095", "00094"]
+    cdec_sensor: [5, 100, 222, 223, 224]    # 5 is mS/cm, 100 is uS/cm
+    wqp_characteristic: ["Specific conductance", "Conductivity"]
+    esmr_parameter: ["Electrical Conductivity @ 25 Deg. C"]
+    usbr_parameter: ["Specific Conductance", "Electrical Conductivity", "Electrical conductivity at 25 degrees C"]
+    dwr_parameter: ["ECat25C"]
+    edi_attribute: ["conductiv", "conductance", "\\bspcnd\\b", "\\bsp_?c\\b"]
+    notes: CDEC sensor 5 is milliSiemens. Multiply by 1000 to match sensor 100.
+
+  salinity:
+    group: core
+    unit: PSU
+    usgs_pcode: ["00480"]
+    cdec_sensor: []
+    wqp_characteristic: ["Salinity"]
+    edi_attribute: ["\\bsalinit"]
+    esmr_parameter: ["Salinity"]
+    dwr_parameter: ["Salinity"]
+
+  total_dissolved_solids:
+    group: core
+    unit: mg/L
+    usgs_pcode: ["70300", "70301"]
+    cdec_sensor: []
+    wqp_characteristic: ["Total dissolved solids"]
+    esmr_parameter: ["Total Dissolved Solids (TDS)"]
+    edi_attribute: ["dissolved\\s*solids", "\\btds\\b"]
+    usbr_parameter: ["Total dissolved solids (TDS)"]
+
+  chloride:
+    group: core
+    unit: mg/L
+    usgs_pcode: ["00940", "99220"]
+    cdec_sensor: [148]
+    wqp_characteristic: ["Chloride"]
+    esmr_parameter: ["Chloride"]
+    dwr_parameter: ["Chloride"]
+    edi_attribute: ["\\bchloride\\b"]
+    usbr_parameter: ["Chloride"]
+
+  sulfate:
+    group: major_ions
+    unit: mg/L
+    usgs_pcode: ["00945", "00946"]
+    cdec_sensor: [152]
+    wqp_characteristic: ["Sulfate"]
+    esmr_parameter: ["Sulfate, Total (as SO4)", "Sulfate, Total (as S)", "Sulfate, Dissolved"]
+    dwr_parameter: ["Sulfate"]
+    usbr_parameter: ["Sulfate"]
+
+  sodium:
+    group: major_ions
+    unit: mg/L
+    usgs_pcode: ["00930"]
+    cdec_sensor: []
+    wqp_characteristic: ["Sodium"]
+    esmr_parameter: ["Sodium, Total", "Sodium, Total Recoverable", "Sodium, Dissolved"]
+    usbr_parameter: ["Sodium"]
+
+  calcium:
+    group: major_ions
+    unit: mg/L
+    usgs_pcode: ["00915"]
+    cdec_sensor: []
+    wqp_characteristic: ["Calcium"]
+    esmr_parameter: ["Calcium, Total", "Calcium, Total Recoverable", "Calcium, Dissolved"]
+    usbr_parameter: ["Calcium"]
+
+  magnesium:
+    group: major_ions
+    unit: mg/L
+    usgs_pcode: ["00925"]
+    cdec_sensor: []
+    wqp_characteristic: ["Magnesium"]
+    esmr_parameter: ["Magnesium, Total", "Magnesium, Total Recoverable", "Magnesium, Dissolved"]
+    usbr_parameter: ["Magnesium"]
+
+  potassium:
+    group: major_ions
+    unit: mg/L
+    usgs_pcode: ["00935"]
+    cdec_sensor: []
+    wqp_characteristic: ["Potassium"]
+    esmr_parameter: ["Potassium, Total", "Potassium, Total Recoverable", "Potassium, Dissolved"]
+    usbr_parameter: ["Potassium"]
+
+  alkalinity:
+    group: major_ions
+    unit: mg/L as CaCO3
+    usgs_pcode: ["00410", "29801", "39086"]
+    cdec_sensor: []
+    wqp_characteristic: ["Alkalinity", "Alkalinity, total"]
+    usbr_parameter: ["Alkalinity", "Alkalinity (as CaCO3) (carbonate)", "Alkalinity (as CaCO3) (bicarbonate)", "Alkalinity (as CaCO3) (hydroxide)", "Alkalinity (as CO3) (carbonate)", "Alkalinity (as HCO3) (bicarbonate)", "Alkalinity (as OH) (hydroxide)"]
+    esmr_parameter:
+      - "Alkalinity, Total (as CaCO3)"
+      - "Alkalinity, Bicarbonate (as CaCO3)"
+      - "Alkalinity, Carbonate (as CaCO3)"
+      - "Alkalinity, Hydroxide (as CaCO3)"
+      - "Bicarbonate Ion (as HCO3)"
+
+  hardness:
+    group: major_ions
+    unit: mg/L as CaCO3
+    usgs_pcode: ["00900"]
+    cdec_sensor: []
+    wqp_characteristic: ["Hardness, Ca, Mg"]
+    esmr_parameter: ["Hardness, Total (as CaCO3)", "Hardness, Ca (as CaCO3)"]
+    usbr_parameter: ["Hardness (as CaCO3)"]
+
+  boron:
+    group: major_ions
+    unit: mg/L
+    usgs_pcode: ["01020", "01022"]
+    cdec_sensor: []
+    wqp_characteristic: ["Boron"]
+    esmr_parameter: ["Boron, Total", "Boron, Total Recoverable", "Boron, Dissolved"]
+    usbr_parameter: ["Boron"]
+    notes: Paired with EC in west-side drainage studies, useful as a source tracer.
+
+  bromide:
+    group: major_ions
+    unit: mg/L
+    usgs_pcode: ["71870"]
+    cdec_sensor: [149]
+    wqp_characteristic: ["Bromide"]
+    esmr_parameter: []
+    dwr_parameter: ["Bromide"]
+
+  dissolved_oxygen:
+    group: extended_wq
+    unit: mg/L
+    usgs_pcode: ["00300", "00299"]
+    cdec_sensor: [61, 201, 202, 228, 229, 230]
+    wqp_characteristic: ["Dissolved oxygen (DO)"]
+    esmr_parameter: ["Dissolved Oxygen"]
+    usbr_parameter: ["Dissolved Oxygen", "Dissolved oxygen (DO)"]
+    dwr_parameter: ["DissolvedOxygen"]
+    edi_attribute: ["dissolved\\s*oxygen", "\\bdo\\b"]
+
+  # Percent of saturation, not a concentration. Folding it into
+  # dissolved_oxygen puts a 96 and a 9.6 in one column, and the unit is the
+  # only thing separating them. Temperature and salinity set the saturation
+  # value, so this is the one an EcoSIM run compares against.
+  dissolved_oxygen_saturation:
+    group: extended_wq
+    unit: "%"
+    usgs_pcode: ["00301"]
+    cdec_sensor: []
+    wqp_characteristic: ["Dissolved oxygen saturation"]
+    esmr_parameter: ["Dissolved Oxygen, saturation"]
+    usbr_parameter: []
+    dwr_parameter: ["DissolvedOxygenPercentage"]
+
+  ph:
+    group: extended_wq
+    unit: standard units
+    edi_attribute: ["\\bph\\b"]
+    usgs_pcode: ["00400"]
+    cdec_sensor: [62, 269]
+    wqp_characteristic: ["pH"]
+    esmr_parameter: ["pH"]
+    usbr_parameter: ["pH"]
+    dwr_parameter: ["pH"]
+
+  turbidity:
+    group: extended_wq
+    unit: NTU
+    usgs_pcode: ["00076", "63680", "63676"]
+    # CDEC 208 is WATER, TURBIDITY VARIANCE, a spread rather than a value.
+    cdec_sensor: [27, 221]
+    wqp_characteristic: ["Turbidity"]
+    esmr_parameter: ["Turbidity"]
+    edi_attribute: ["turbidit"]
+    usbr_parameter: ["Turbidity"]
+    dwr_parameter: ["Turbidity"]
+
+  suspended_solids:
+    group: extended_wq
+    unit: mg/L
+    usgs_pcode: ["00530", "80154"]
+    cdec_sensor: []
+    wqp_characteristic: ["Total suspended solids", "Suspended Sediment Concentration (SSC)"]
+    esmr_parameter: ["Total Suspended Solids (TSS)"]
+    edi_attribute: ["suspended\\s*(?:solids|sediment)", "\\btss\\b", "\\bssc\\b"]
+    usbr_parameter: ["Total suspended solids (TSS)"]
+
+  organic_carbon:
+    group: extended_wq
+    unit: mg/L
+    usgs_pcode: ["00680", "00681"]
+    cdec_sensor: [109]
+    wqp_characteristic: ["Organic carbon"]
+    esmr_parameter: ["Dissolved Organic Carbon", "Total Organic Carbon (TOC)"]
+    dwr_parameter: ["DOC", "TOC"]
+    edi_attribute: ["organic\\s*carbon", "\\bdoc\\b", "\\btoc\\b"]
+    usbr_parameter: ["Organic carbon, total (TOC)"]
+
+  nitrate:
+    group: extended_wq
+    unit: mg/L as N
+    usgs_pcode: ["00618", "00620", "00631"]
+    cdec_sensor: [150]
+    wqp_characteristic: ["Nitrate", "Inorganic nitrogen (nitrate and nitrite)"]
+    dwr_parameter: ["Nitrate"]
+    usbr_parameter: ["Nitrate+nitrite (as N)"]
+    esmr_parameter:
+      - "Nitrate, Total (as N)"
+      - "Nitrate, Total (as NO3)"
+      - "Nitrite Plus Nitrate (as N)"
+
+  ammonia:
+    group: extended_wq
+    unit: mg/L as N
+    usgs_pcode: ["00608", "00610"]
+    cdec_sensor: []
+    wqp_characteristic: ["Ammonia", "Ammonia and ammonium"]
+    esmr_parameter: ["Ammonia, Total (as N)", "Ammonia, Unionized (as N)"]
+    usbr_parameter: ["Ammonia (as N)"]
+
+  total_nitrogen:
+    group: extended_wq
+    unit: mg/L as N
+    usgs_pcode: ["00600", "00625", "62855"]
+    cdec_sensor: []
+    wqp_characteristic: ["Nitrogen", "Kjeldahl nitrogen"]
+    esmr_parameter:
+      - "Nitrogen, Total (as N)"
+      - "Total Kjeldahl Nitrogen (TKN) (as N)"
+      - "Nitrogen, Total Organic (as N)"
+
+  phosphorus:
+    group: extended_wq
+    unit: mg/L as P
+    usgs_pcode: ["00665", "00666", "00671"]
+    cdec_sensor: [151]
+    wqp_characteristic: ["Phosphorus", "Orthophosphate"]
+    esmr_parameter: ["Phosphorus, Total (as P)", "Orthophosphate, Total (as P)"]
+    usbr_parameter: ["Phosphorus"]
+
+  chlorophyll_a:
+    group: extended_wq
+    unit: ug/L
+    usgs_pcode: ["32209", "70953", "62361"]
+    cdec_sensor: [28, 114]
+    wqp_characteristic: ["Chlorophyll a"]
+    esmr_parameter: ["Chlorophyll a"]
+    dwr_parameter: ["Chlorophyll"]
+    edi_attribute: ["chlorophyll", "\\bchl[\\s_-]?a\\b"]
+
+  selenium:
+    group: extended_wq
+    unit: ug/L
+    usgs_pcode: ["01145", "01147"]
+    cdec_sensor: []
+    wqp_characteristic: ["Selenium"]
+    esmr_parameter: ["Selenium, Total", "Selenium, Total Recoverable", "Selenium, Dissolved"]
+    usbr_parameter: ["Selenium"]
+    notes: Grassland Bypass / San Luis Drain driver constituent.
+
+  discharge:
+    group: water_balance
+    unit: cfs
+    usgs_pcode: ["00060", "00061"]
+    cdec_sensor: [20, 41, 142, 143, 165, 23]
+    wqp_characteristic: ["Stream flow, instantaneous", "Flow"]
+    esmr_parameter: ["Flow"]
+    usbr_parameter: ["Streamflow", "Lake/Reservoir Release - Total", "Lake/Reservoir Release - Outlet", "Lake/Reservoir Release - Spillway", "Lake/Reservoir Release - Powerplant", "Canal Flow", "Pumping Plant Discharge"]
+    dwr_parameter: ["StreamFlow"]
+    edi_attribute: ["\\bdischarge\\b", "stream\\s*flow", "\\bflow\\b"]
+
+  # Flow computed rather than gaged. CDEC sensor 8 is FULL NATURAL FLOW, the
+  # unimpaired runoff a basin would have produced without its dams and
+  # diversions, and
+  # sensor 76 is RESERVOIR INFLOW, computed from the storage change plus the
+  # release. Both are useful and neither is a measurement, so a calibration
+  # that treats them as gaged discharge is fitting to a model output.
+  computed_flow:
+    group: water_balance
+    unit: cfs
+    usgs_pcode: []
+    cdec_sensor: [8, 76]
+    wqp_characteristic: []
+    esmr_parameter: []
+    usbr_parameter: ["Lake/Reservoir Inflow", "Lake/Reservoir Inflow (computed)"]
+
+  stage:
+    group: water_balance
+    unit: ft
+    usgs_pcode: ["00065"]
+    # 6 is RESERVOIR ELEVATION and 43 is POOL ELEVATION, both in feet. Under
+    # reservoir_storage they claimed a volume the storage curve alone supplies.
+    cdec_sensor: [1, 141, 144, 204, 6, 43]
+    wqp_characteristic: ["Stream stage"]
+    esmr_parameter: []
+    usbr_parameter: ["Stream Gage Height", "Lake/Reservoir Elevation"]
+    dwr_parameter: ["StreamLevel", "WaterSurfaceElevationNAVD88"]
+    edi_attribute: ["water\\s*stage", "river\\s*stage", "stream\\s*stage", "water\\s*level", "gage\\s*height", "water\\s*surface\\s*elev"]
+
+  reservoir_storage:
+    group: water_balance
+    unit: acre-ft
+    usgs_pcode: ["00054"]
+    cdec_sensor: [15, 42]
+    wqp_characteristic: []
+    esmr_parameter: []
+    usbr_parameter: ["Lake/Reservoir Storage"]
+
+  diversion:
+    group: water_balance
+    unit: cfs
+    usgs_pcode: []
+    cdec_sensor: [69, 110, 111, 72]
+    wqp_characteristic: []
+    esmr_parameter: []
