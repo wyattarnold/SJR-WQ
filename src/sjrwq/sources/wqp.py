@@ -31,6 +31,9 @@ SOURCE = "wqp"
 # The portal's gzip encoder truncates on slow result queries. See results().
 NO_GZIP = {"Accept-Encoding": "identity"}
 
+# The last line of a response the portal cut short. See _complete().
+INCOMPLETE = "ERROR: INCOMPLETE DATA"
+
 # Synthetic USGS records published through the portal. See harvest().
 TEST_SITE_ID = r"1231231231231\d\d"
 
@@ -87,10 +90,24 @@ def stations(huc8: str, bbox: list[float] | None = None) -> pd.DataFrame:
     if bbox:
         params["bBox"] = ",".join(str(b) for b in bbox)
     txt = fetch(f"{BASE}/Station/search", SOURCE, params=params,
-                label=f"station_{huc8}.csv")
+                label=f"station_{huc8}.csv", validate=_complete)
     df = pd.read_csv(io.StringIO(txt), low_memory=False)
     log.info("wqp %s -> %d stations", huc8, len(df))
     return df
+
+
+def _complete(payload: str | bytes) -> str | None:
+    """Name what is wrong with a response, or None where it is whole.
+
+    The portal answers 200 and ends a response it cut short with a line
+    starting `ERROR: INCOMPLETE DATA`, which asks the caller to retry, so a
+    status check alone stores a partial table as a whole one. A retry does
+    return the rest: one query that stopped at 18.9 MB on 2026-09-22 returned
+    22,061,060 bytes twice afterwards.
+    """
+    text = payload if isinstance(payload, str) else payload.decode("utf-8", "replace")
+    last = text.rstrip().rsplit("\n", 1)[-1]
+    return "a partial table" if last.startswith(INCOMPLETE) else None
 
 
 def _result_query(characteristics: list[str], label: str,
@@ -106,7 +123,7 @@ def _result_query(characteristics: list[str], label: str,
     params += [("characteristicName", c) for c in characteristics]
     txt = fetch(f"{BASE}/Result/search", SOURCE, params=params,
                 label=label, timeout=900, retries=retries, backoff=backoff,
-                headers=NO_GZIP)
+                headers=NO_GZIP, validate=_complete)
     if not txt.strip():
         return pd.DataFrame()
     return pd.read_csv(io.StringIO(txt), low_memory=False)
@@ -136,7 +153,21 @@ def results(huc8: str, characteristics: list[str],
     all 36 take 99 seconds for 5,023. The portal scans on the HUC filter, so a
     narrow query saves no time. Ask for everything at once.
 
-    Both facts point the same way: narrowing a failed query is wasted effort.
+    **A 200 can be partial.** The portal federates NWIS and STORET, and it
+    reports a provider that returned nothing in the body rather than in the
+    status, on a last line starting `ERROR: INCOMPLETE DATA`. `fetch` takes
+    `_complete` and counts that answer as a failed attempt. The NWIS half
+    carries USGS discrete samples, which USGS also serves from its Samples API
+    at `api.waterdata.usgs.gov/samples-data`, so an outage of that data reaches
+    this module as a trailer. On 2026-09-22 and 2026-09-23 both routes timed
+    out and the check caught 10 of the 11 cached result files, each holding its
+    STORET rows, under 100 of its USGS rows, and that trailer. Adding
+    `providers=STORET` isolates the healthy half and tells the two apart: all
+    36 characteristics over HUC 18040001 return 85.6 MB complete in 210
+    seconds, against 22.7 MB and a trailer unrestricted.
+
+    The encoding and the flat cost point the same way: narrowing a failed query
+    is wasted effort.
     Batching here is damage control for a portal outage, and this module logs a
     batch that still fails so the caller can record the gap.
     """

@@ -1536,6 +1536,7 @@ def test_fetch_refetches_when_the_request_changed(tmp_path, monkeypatch):
 
     class _Response:
         status_code = 200
+        encoding = "utf-8"
         text = "new"
         content = b"new"
 
@@ -1581,6 +1582,97 @@ def test_fetch_refetches_when_the_request_changed(tmp_path, monkeypatch):
     assert len(calls) == 1
     assert cached.read_text() == "new"
     assert "bBox=-121.40,37.60" in json.loads(sidecar.read_text())["request_url"]
+
+
+def test_fetch_refuses_a_response_the_validator_rejects(tmp_path, monkeypatch):
+    """A rejected response costs a retry, reaches no cache file, and a cached
+    one gets fetched again.
+
+    The portal answers 200 and names a table it cut short on the last line, so
+    the status alone stores partial data. `fetch` runs the check before the
+    write and again on a hit.
+    """
+    from sjrwq import config
+    from sjrwq.sources.wqp import _complete
+
+    partial = "a,b\n1,2\nERROR: INCOMPLETE DATA - THE RESULTS FOR THIS REQUEST\n"
+    whole = "a,b\n1,2\n3,4\n"
+    served = [partial, partial, whole]
+
+    class _Response:
+        status_code = 200
+        encoding = "utf-8"
+
+        def __init__(self, url):
+            self.url = url
+            self.text = served.pop(0)
+            self.content = self.text.encode()
+
+        def raise_for_status(self):
+            return None
+
+    class _Session:
+        def get(self, url, params=None, timeout=None, headers=None):
+            return _Response(url)
+
+    monkeypatch.setattr(config, "RAW", tmp_path)
+    monkeypatch.setattr(config, "session", _Session)
+    url = "https://example.test/Result/search"
+    cached = tmp_path / "wqp" / "result.csv"
+
+    # Two partial answers, then a whole one, and only the whole one is cached.
+    assert config.fetch(url, "wqp", label="result.csv", retries=3, backoff=0,
+                        validate=_complete) == whole
+    assert cached.read_text() == whole
+    assert not served
+
+    # A file cached before the check counts as a miss.
+    cached.write_text(partial)
+    served.append(whole)
+    assert config.fetch(url, "wqp", label="result.csv", retries=1, backoff=0,
+                        validate=_complete) == whole
+    assert cached.read_text() == whole
+
+
+def test_fetch_decodes_a_cache_hit_as_the_fetch_did(tmp_path, monkeypatch):
+    """A cache hit returns the text the fetch returned, whatever the locale.
+
+    CDEC serves its staMeta pages in UTF-8, with curly quotes in the comment
+    log. The Windows code page leaves 0x9d, the last byte of a closing quote,
+    undefined, so a decode in the locale raises and the harvest drops the
+    station. The sidecar records the encoding the fetch used, and a sidecar
+    without one decodes as UTF-8.
+    """
+    from sjrwq import config
+
+    class _Response:
+        status_code = 200
+        encoding = "ISO-8859-1"
+        content = "5 µS/cm".encode("latin-1")
+
+        def __init__(self, url):
+            self.url = url
+            self.text = self.content.decode(self.encoding)
+
+        def raise_for_status(self):
+            return None
+
+    class _Session:
+        def get(self, url, params=None, timeout=None, headers=None):
+            return _Response(url)
+
+    monkeypatch.setattr(config, "RAW", tmp_path)
+    monkeypatch.setattr(config, "session", _Session)
+    url = "https://example.test/staMeta"
+    fetched = config.fetch(url, "cdec", label="latin.html", retries=1)
+    assert fetched == "5 µS/cm"
+    assert config.fetch(url, "cdec", label="latin.html") == fetched
+
+    page = "station ID “SJC”"
+    cached = tmp_path / "cdec" / "utf8.html"
+    cached.write_bytes(page.encode("utf-8"))
+    cached.with_suffix(".html.meta.json").write_text(json.dumps({"request_url": url}))
+    assert config.fetch(url, "cdec", label="utf8.html") == page
 
 
 def test_decade_table_counts_station_scope_records():

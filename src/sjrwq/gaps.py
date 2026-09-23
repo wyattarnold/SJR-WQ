@@ -1128,13 +1128,13 @@ def update_readme(text: str) -> bool:
     path = ROOT / "README.md"
     if not path.exists():
         return False
-    body = path.read_text()
+    body = path.read_text(encoding="utf-8")
     if README_START not in body or README_END not in body:
         log.warning("README has no harvest-summary markers; leaving it alone")
         return False
     head, rest = body.split(README_START, 1)
     _, tail = rest.split(README_END, 1)
-    path.write_text(f"{head}{README_START}\n{text}\n{README_END}{tail}")
+    path.write_text(f"{head}{README_START}\n{text}\n{README_END}{tail}", encoding="utf-8")
     log.info("rewrote the harvest summary in README.md")
     return True
 
@@ -1811,7 +1811,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     DOCS.mkdir(parents=True, exist_ok=True)
     text = build_report()
-    (DOCS / "gap_analysis.md").write_text(text)
+    (DOCS / "gap_analysis.md").write_text(text, encoding="utf-8")
     log.info("wrote %s", DOCS / "gap_analysis.md")
 
     st, sp, _ = _load()

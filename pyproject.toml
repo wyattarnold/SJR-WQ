@@ -16,6 +16,7 @@ dependencies = [
     "rapidfuzz",
     "pillow",
     "tabulate",
+    "truststore>=0.10.4",
 ]
 
 [dependency-groups]

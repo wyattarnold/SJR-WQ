@@ -41,6 +41,11 @@ from .inventory import OFF_CHANNEL_CLASSES
 from .places import RESERVOIR_LABEL, RESERVOIRS, TIMELINE_ANCHORS, TOWNS
 from .rivers import ON_CHANNEL_M, merged_mainstem_line, river_distance_km
 
+# Agg draws to a file with no window. The Tk backend, the Windows default,
+# loads its Tcl library for each figure, and under uv's managed Python that
+# load fails for some figures and not others.
+mpl.use("Agg")
+
 # Arial, at 9 pt or smaller. Matplotlib falls back down this list in
 # order, so a machine without Arial gets Helvetica and then the shipped default
 # rather than a findfont warning and an unpredictable substitute.
@@ -1715,7 +1720,7 @@ def write_captions() -> None:
                 textwrap.fill(c["caption"], 79), ""]
     path = DOCS / "figures.md"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("\n".join(out).rstrip() + "\n")
+    path.write_text("\n".join(out).rstrip() + "\n", encoding="utf-8")
     log.info("wrote docs/%s", path.name)
 
 
